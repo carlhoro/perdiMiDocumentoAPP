@@ -1,0 +1,9 @@
+services:
+  app:
+    build:
+      context: .
+      target: production
+    restart: unless-stopped
+    environment:
+      - APP_ENV=production
+    command: ["sleep", "infinity"]
