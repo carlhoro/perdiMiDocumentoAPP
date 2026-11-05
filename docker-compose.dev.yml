@@ -3,9 +3,14 @@ services:
     build:
       context: .
       target: development
+    ports:
+      - "8080:8080"
     volumes:
-      - ./src:/app/src
-      - ./tests:/app/tests
+      - .:/app
+      - dev_data:/app/data
     environment:
-      - APP_ENV=development
-    command: ["sleep", "infinity"]
+      DB_PATH: /app/data/documentos.db
+    command: ["go", "run", "./src/cmd/server"]
+
+volumes:
+  dev_data:

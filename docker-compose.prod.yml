@@ -4,6 +4,13 @@ services:
       context: .
       target: production
     restart: unless-stopped
+    ports:
+      - "8080:8080"
     environment:
-      - APP_ENV=production
-    command: ["sleep", "infinity"]
+      DB_PATH: /app/data/documentos.db
+      COOKIE_SECURE: "${COOKIE_SECURE:-false}"
+    volumes:
+      - prod_data:/app/data
+
+volumes:
+  prod_data:

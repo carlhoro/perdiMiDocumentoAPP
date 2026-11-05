@@ -1,9 +1,18 @@
-# Imagen base agnóstica; ajustar cuando se elija el stack tecnológico.
-FROM alpine:3.20 AS base
+FROM golang:1.24 AS development
 WORKDIR /app
-
-FROM base AS development
+COPY go.mod go.sum ./
+RUN go mod download
 COPY . .
+EXPOSE 8080
+CMD ["go", "run", "./src/cmd/server"]
 
-FROM base AS production
-COPY src ./src
+FROM development AS build
+RUN CGO_ENABLED=0 go build -o /server ./src/cmd/server
+
+FROM alpine:3.20 AS production
+WORKDIR /app
+COPY --from=build /server /app/server
+RUN mkdir -p /app/data && chown -R 10001:10001 /app/data
+USER 10001:10001
+EXPOSE 8080
+CMD ["/app/server"]
