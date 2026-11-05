@@ -1,0 +1,11 @@
+services:
+  app:
+    build:
+      context: .
+      target: development
+    volumes:
+      - ./src:/app/src
+      - ./tests:/app/tests
+    environment:
+      - APP_ENV=development
+    command: ["sleep", "infinity"]
