@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Perdí mi documento</title>
+  <style>
+    body { font: 16px system-ui, sans-serif; background: #f3f6fa; color: #17233c; margin: 0; }
+    main { max-width: 1000px; margin: auto; padding: 1.5rem; }
+    h1 { margin-bottom: .3rem; } h2 { font-size: 1.2rem; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 1rem; }
+    section { background: white; border-radius: .6rem; padding: 1.2rem; box-shadow: 0 2px 8px #0001; }
+    form { display: grid; gap: .6rem; } label { display: grid; gap: .2rem; }
+    input, button { font: inherit; padding: .55rem; border-radius: .3rem; border: 1px solid #aeb8c7; }
+    button { background: #1654a3; color: white; border: 0; cursor: pointer; }
+    button.secondary { background: #526179; } ul { padding-left: 1.2rem; overflow-wrap: anywhere; }
+    #message { min-height: 1.5em; color: #8b241a; } [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Perdí mi documento</h1>
+  <p>Reporta un documento encontrado o busca por su número de identificación.</p>
+  <p id="message" role="status" aria-live="polite"></p>
+  <div id="auth" class="grid">
+    <section><h2>Crear cuenta</h2><form id="register">
+      <label>Usuario<input name="usuario" required maxlength="100" autocomplete="username"></label>
+      <label>Clave (mínimo 8 caracteres)<input name="clave" type="password" required minlength="8" autocomplete="new-password"></label>
+      <button>Registrarse</button>
+    </form></section>
+    <section><h2>Iniciar sesión</h2><form id="login">
+      <label>Usuario<input name="usuario" required autocomplete="username"></label>
+      <label>Clave<input name="clave" type="password" required autocomplete="current-password"></label>
+      <button>Ingresar</button>
+    </form></section>
+  </div>
+  <div id="app" hidden>
+    <p>Sesión: <strong id="username"></strong> <button class="secondary" id="logout">Salir</button></p>
+    <div class="grid">
+      <section><h2>Registrar documento encontrado</h2><form id="document">
+        <label>Número de identificación<input name="numero" required maxlength="200"></label>
+        <label>Tipo de documento<input name="tipo" required maxlength="200" placeholder="Ej. cédula"></label>
+        <label>Nombre del titular<input name="nombre_titular" required maxlength="200"></label>
+        <label>Dirección donde se encuentra<input name="direccion" required maxlength="200"></label>
+        <button>Registrar</button>
+      </form></section>
+      <section><h2>Buscar documento</h2><form id="search">
+        <label>Número de identificación<input name="numero" required maxlength="200"></label>
+        <button>Buscar</button>
+      </form><ul id="results"></ul></section>
+      <section><h2>Recibir notificaciones</h2><p>Suscríbete con el número de tu documento.</p><form id="subscribe">
+        <label>Número de identificación<input name="numero" required maxlength="200"></label>
+        <button>Suscribirse</button>
+      </form><h3>Notificaciones</h3><button class="secondary" id="refresh">Actualizar</button><ul id="notifications"></ul></section>
+    </div>
+  </div>
+</main>
+<script>
+  const $ = id => document.getElementById(id);
+  let timer;
+  async function api(path, options = {}) {
+    const response = await fetch(path, { ...options, headers: { "Content-Type": "application/json" } });
+    const body = await response.json();
+    if (!response.ok) throw new Error(body.error || "Error de comunicación");
+    return body;
+  }
+  function showMessage(message) { $("message").textContent = message; }
+  function showDocuments(target, docs) {
+    target.replaceChildren();
+    if (!docs.length) { const li = document.createElement("li"); li.textContent = "Sin resultados"; target.append(li); return; }
+    for (const doc of docs) {
+      const li = document.createElement("li");
+      li.textContent = `${doc.tipo} · ${doc.numero} · ${doc.nombre_titular} · Dirección: ${doc.direccion} · ${new Date(doc.fecha).toLocaleString()}`;
+      target.append(li);
+    }
+  }
+  async function refresh() {
+    try { showDocuments($("notifications"), (await api("/api/notificaciones")).map(n => n.documento)); }
+    catch (error) { showMessage(error.message); }
+  }
+  function signedIn(username) {
+    $("username").textContent = username;
+    $("auth").hidden = true; $("app").hidden = false;
+    clearInterval(timer); refresh(); timer = setInterval(refresh, 15000);
+  }
+  function form(id, action) {
+    $(id).addEventListener("submit", async event => {
+      event.preventDefault(); showMessage("");
+      try { await action(Object.fromEntries(new FormData(event.currentTarget))); }
+      catch (error) { showMessage(error.message); }
+    });
+  }
+  const post = (path, data) => api(path, { method: "POST", body: JSON.stringify(data) });
+  form("register", async data => { await post("/api/registro", data); $("register").reset(); showMessage("Cuenta creada. Inicia sesión."); });
+  form("login", async data => { const result = await post("/api/ingreso", data); $("login").reset(); signedIn(result.usuario); });
+  form("document", async data => { await post("/api/documentos", data); $("document").reset(); showMessage("Documento registrado."); await refresh(); });
+  form("search", async data => showDocuments($("results"), await api("/api/documentos?numero=" + encodeURIComponent(data.numero))));
+  form("subscribe", async data => { await post("/api/suscripciones", data); showMessage("Suscripción activa."); await refresh(); });
+  $("refresh").addEventListener("click", refresh);
+  $("logout").addEventListener("click", async () => {
+    try {
+      await post("/api/salir", {}); clearInterval(timer); $("auth").hidden = false; $("app").hidden = true;
+      $("results").replaceChildren(); $("notifications").replaceChildren(); showMessage("Sesión cerrada.");
+    } catch (error) { showMessage(error.message); }
+  });
+  api("/api/sesion").then(result => signedIn(result.usuario)).catch(error => {
+    if (error.message !== "Inicie sesión") showMessage(error.message);
+  });
+</script>
+</body>
+</html>
