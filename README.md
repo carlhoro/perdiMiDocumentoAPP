@@ -45,6 +45,8 @@ Las rutas protegidas requieren la cookie de sesión obtenida en el ingreso. Las 
 
 El dominio define modelos, puertos y servicios; los adaptadores HTTP y SQLite implementan las entradas y salidas. `DocumentFactory.Create` crea y valida los objetos de documento. `DocumentProxy` intercepta la creación y audita los rechazos; el repositorio registra las operaciones exitosas en `logs` con usuario, número, documento y fecha. El registro, su log y las notificaciones se guardan en la misma transacción. El sujeto notifica a los observadores persistidos por número, de manera que las suscripciones sobreviven a reinicios. La conexión principal se inicializa mediante singleton.
 
+El adaptador SQLite está organizado por responsabilidad en `src/infrastructure/out/db`; sus representaciones de filas se convierten a modelos de dominio en el límite del repositorio. El adaptador HTTP utiliza DTO para sus respuestas JSON, mientras que los puertos siguen utilizando modelos del dominio.
+
 Las contraseñas se guardan con bcrypt; los tokens de sesión se guardan como hashes y caducan a las 24 horas. Las fechas en SQLite son Unix UTC. `logs.operation` distingue `registro` y `registro_rechazado`.
 
 ## Antes de publicar

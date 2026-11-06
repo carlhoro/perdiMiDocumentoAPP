@@ -17,3 +17,9 @@ Reglas:
 2. La infraestructura depende del dominio, nunca al revés.
 3. Toda interacción externa pasa por un puerto.
 4. Los adaptadores se crean en pasos posteriores; no añadir funcionalidad sin pedirlo.
+
+Límites y representaciones:
+- Los puertos usan tipos y contratos del dominio; los adaptadores pueden importarlos e implementarlos sin invertir la dirección de las dependencias.
+- Mantener los modelos del dominio independientes de formatos HTTP y detalles de persistencia. Los DTO de transporte y los DBO de persistencia pertenecen a sus adaptadores y no atraviesan los puertos.
+- Convertir explícitamente entre representaciones en el límite del adaptador, conservando el contrato público, los errores y las reglas de negocio.
+- Crear DTO o DBO cuando exista una representación o necesidad de aislamiento concreta; evitar duplicar tipos sin beneficio.
