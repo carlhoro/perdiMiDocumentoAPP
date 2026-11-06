@@ -213,7 +213,7 @@ func (s *Server) createDocument(w http.ResponseWriter, r *http.Request, u models
 		internal(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, doc)
+	writeJSON(w, http.StatusCreated, documentToResponse(doc))
 }
 
 func validNumber(number string) bool { return number != "" && utf8.RuneCountInString(number) <= 200 }
@@ -229,7 +229,7 @@ func (s *Server) searchDocuments(w http.ResponseWriter, r *http.Request, _ model
 		internal(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, docs)
+	writeJSON(w, http.StatusOK, documentsToResponse(docs))
 }
 
 func (s *Server) subscribe(w http.ResponseWriter, r *http.Request, u models.User) {
@@ -257,5 +257,5 @@ func (s *Server) notifications(w http.ResponseWriter, r *http.Request, u models.
 		internal(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, notifications)
+	writeJSON(w, http.StatusOK, notificationsToResponse(notifications))
 }
