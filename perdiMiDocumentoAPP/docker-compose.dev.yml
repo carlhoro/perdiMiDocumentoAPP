@@ -1,0 +1,16 @@
+services:
+  app:
+    build:
+      context: .
+      target: development
+    ports:
+      - "8080:8080"
+    volumes:
+      - .:/app
+      - dev_data:/app/data
+    environment:
+      DB_PATH: /app/data/documentos.db
+    command: ["go", "run", "./src/cmd/server"]
+
+volumes:
+  dev_data:
