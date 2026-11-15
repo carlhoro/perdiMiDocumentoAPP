@@ -26,8 +26,23 @@ func main() {
 		log.Fatal(err)
 	}
 	defer db.Close()
+
 	repo := &out.SQLiteRepository{DB: db}
-	handler := (&in.Server{Repository: repo, Registrar: services.DocumentProxy{Repository: repo, Factory: models.DocumentFactory{}}, SecureCookies: os.Getenv("COOKIE_SECURE") == "true"}).Handler()
+	auth := services.AuthService{
+		Repository: repo,
+		Hasher:     services.BcryptPasswordHasher{},
+		Tokens:     services.SHA256TokenProvider{},
+	}
+	handler := (&in.Server{
+		UserRegistrar:    auth,
+		SessionManager:   auth,
+		Registrar:        services.DocumentProxy{Repository: repo, Factory: models.DocumentFactory{}},
+		DocumentSearcher: services.DocumentSearchService{Repository: repo},
+		Subscriptions:    services.SubscriptionService{Repository: repo},
+		Notifications:    services.NotificationService{Repository: repo},
+		SecureCookies:    os.Getenv("COOKIE_SECURE") == "true",
+	}).Handler()
+
 	address := os.Getenv("HTTP_ADDR")
 	if address == "" {
 		address = ":8080"
