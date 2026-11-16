@@ -10,7 +10,7 @@ import (
 	"perdimidocumento/src/domain/models"
 	"perdimidocumento/src/domain/services"
 	in "perdimidocumento/src/infrastructure/in"
-	"perdimidocumento/src/infrastructure/out"
+	out "perdimidocumento/src/infrastructure/out/db"
 )
 
 func main() {

@@ -1,4 +1,4 @@
-package tests
+﻿package tests
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 
 	"perdimidocumento/src/domain/models"
 	"perdimidocumento/src/domain/ports"
-	"perdimidocumento/src/infrastructure/out"
+	out "perdimidocumento/src/infrastructure/out/db"
 )
 
 func sqliteRepo(t *testing.T) *out.SQLiteRepository {
@@ -42,21 +42,21 @@ func TestSQLiteRepositorySessionLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	if logged.ID != user.ID || logged.Username != user.Username {
-		t.Fatalf("usuario por sesión inesperado: %+v", logged)
+		t.Fatalf("usuario por sesiÃ³n inesperado: %+v", logged)
 	}
 
 	if err := repo.CreateSession(ctx, user.ID, "hash-expirada", time.Now().Add(-time.Minute)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := repo.UserBySession(ctx, "hash-expirada"); !errors.Is(err, ports.ErrNotFound) {
-		t.Fatalf("la sesión expirada debe estar ausente: %v", err)
+		t.Fatalf("la sesiÃ³n expirada debe estar ausente: %v", err)
 	}
 
 	if err := repo.DeleteSession(ctx, "hash-token"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := repo.UserBySession(ctx, "hash-token"); !errors.Is(err, ports.ErrNotFound) {
-		t.Fatalf("la sesión eliminada debe estar ausente: %v", err)
+		t.Fatalf("la sesiÃ³n eliminada debe estar ausente: %v", err)
 	}
 }
 
@@ -73,11 +73,11 @@ func TestSQLiteRepositorySearchDocumentsReturnsLatestFirst(t *testing.T) {
 	}
 
 	factory := models.DocumentFactory{}
-	doc1, err := factory.Create("001", "Cédula", "Ana", "Oficina centro", user.ID)
+	doc1, err := factory.Create("001", "CÃ©dula", "Ana", "Oficina centro", user.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	doc2, err := factory.Create("001", "Cédula", "Ana", "Oficina norte", user.ID)
+	doc2, err := factory.Create("001", "CÃ©dula", "Ana", "Oficina norte", user.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +99,7 @@ func TestSQLiteRepositorySearchDocumentsReturnsLatestFirst(t *testing.T) {
 		t.Fatalf("cantidad inesperada: %d", len(docs))
 	}
 	if docs[0].ID != created2.ID || docs[0].Address != "Oficina norte" {
-		t.Fatalf("el documento más reciente debe ir primero: %+v", docs[0])
+		t.Fatalf("el documento mÃ¡s reciente debe ir primero: %+v", docs[0])
 	}
 	if docs[1].ID != created1.ID || docs[1].Address != "Oficina centro" {
 		t.Fatalf("el documento anterior debe ir al final: %+v", docs[1])
