@@ -1,20 +1,15 @@
 package in
 
 import (
-	"crypto/rand"
-	"crypto/sha256"
 	"embed"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
 	"log"
 	"net/http"
 	"strings"
-	"time"
 	"unicode/utf8"
 
-	"golang.org/x/crypto/bcrypt"
 	"perdimidocumento/src/domain/models"
 	"perdimidocumento/src/domain/ports"
 )
@@ -23,9 +18,13 @@ import (
 var static embed.FS
 
 type Server struct {
-	Repository    ports.Repository
-	Registrar     ports.DocumentRegistrar
-	SecureCookies bool
+	UserRegistrar    ports.UserRegistrar
+	SessionManager   ports.SessionManager
+	Registrar        ports.DocumentRegistrar
+	DocumentSearcher ports.DocumentSearcher
+	Subscriptions    ports.SubscriptionManager
+	Notifications    ports.NotificationReader
+	SecureCookies    bool
 }
 
 func (s *Server) Handler() http.Handler {
@@ -99,12 +98,7 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, "Usuario obligatorio (máximo 100 caracteres) y clave de 8 a 72 bytes")
 		return
 	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(c.Password), bcrypt.DefaultCost)
-	if err != nil {
-		internal(w, err)
-		return
-	}
-	err = s.Repository.CreateUser(r.Context(), c.Username, string(hash))
+	err := s.UserRegistrar.Register(r.Context(), c.Username, c.Password)
 	if errors.Is(err, ports.ErrConflict) {
 		fail(w, http.StatusConflict, "El usuario ya existe")
 		return
@@ -116,11 +110,6 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]string{"mensaje": "Usuario creado; inicie sesión"})
 }
 
-func tokenHash(token string) string {
-	sum := sha256.Sum256([]byte(token))
-	return hex.EncodeToString(sum[:])
-}
-
 func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	var c credentials
 	if !decode(w, r, &c) {
@@ -130,8 +119,8 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusUnauthorized, "Credenciales incorrectas")
 		return
 	}
-	u, err := s.Repository.UserByName(r.Context(), strings.TrimSpace(c.Username))
-	if errors.Is(err, ports.ErrNotFound) {
+	session, err := s.SessionManager.Login(r.Context(), strings.TrimSpace(c.Username), c.Password)
+	if errors.Is(err, ports.ErrInvalidCredentials) {
 		fail(w, http.StatusUnauthorized, "Credenciales incorrectas")
 		return
 	}
@@ -139,23 +128,8 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		internal(w, err)
 		return
 	}
-	if bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(c.Password)) != nil {
-		fail(w, http.StatusUnauthorized, "Credenciales incorrectas")
-		return
-	}
-	bytes := make([]byte, 32)
-	if _, err := rand.Read(bytes); err != nil {
-		internal(w, err)
-		return
-	}
-	token := hex.EncodeToString(bytes)
-	expires := time.Now().Add(24 * time.Hour)
-	if err := s.Repository.CreateSession(r.Context(), u.ID, tokenHash(token), expires); err != nil {
-		internal(w, err)
-		return
-	}
-	http.SetCookie(w, &http.Cookie{Name: "sesion", Value: token, Path: "/", HttpOnly: true, Secure: s.SecureCookies, SameSite: http.SameSiteStrictMode, Expires: expires})
-	writeJSON(w, http.StatusOK, map[string]string{"usuario": u.Username})
+	http.SetCookie(w, &http.Cookie{Name: "sesion", Value: session.Token, Path: "/", HttpOnly: true, Secure: s.SecureCookies, SameSite: http.SameSiteStrictMode, Expires: session.ExpiresAt})
+	writeJSON(w, http.StatusOK, map[string]string{"usuario": session.User.Username})
 }
 
 type authenticatedHandler func(http.ResponseWriter, *http.Request, models.User)
@@ -167,7 +141,7 @@ func (s *Server) auth(next authenticatedHandler) http.HandlerFunc {
 			fail(w, http.StatusUnauthorized, "Inicie sesión")
 			return
 		}
-		u, err := s.Repository.UserBySession(r.Context(), tokenHash(cookie.Value))
+		u, err := s.SessionManager.UserByToken(r.Context(), cookie.Value)
 		if errors.Is(err, ports.ErrNotFound) {
 			fail(w, http.StatusUnauthorized, "Inicie sesión")
 			return
@@ -182,7 +156,11 @@ func (s *Server) auth(next authenticatedHandler) http.HandlerFunc {
 
 func (s *Server) logout(w http.ResponseWriter, r *http.Request, _ models.User) {
 	cookie, _ := r.Cookie("sesion")
-	if err := s.Repository.DeleteSession(r.Context(), tokenHash(cookie.Value)); err != nil {
+	token := ""
+	if cookie != nil {
+		token = cookie.Value
+	}
+	if err := s.SessionManager.Logout(r.Context(), token); err != nil {
 		internal(w, err)
 		return
 	}
@@ -224,7 +202,7 @@ func (s *Server) searchDocuments(w http.ResponseWriter, r *http.Request, _ model
 		fail(w, http.StatusBadRequest, "Número obligatorio (máximo 200 caracteres)")
 		return
 	}
-	docs, err := s.Repository.SearchDocuments(r.Context(), number)
+	docs, err := s.DocumentSearcher.Search(r.Context(), number)
 	if err != nil {
 		internal(w, err)
 		return
@@ -244,7 +222,7 @@ func (s *Server) subscribe(w http.ResponseWriter, r *http.Request, u models.User
 		fail(w, http.StatusBadRequest, "Número obligatorio (máximo 200 caracteres)")
 		return
 	}
-	if err := s.Repository.Subscribe(r.Context(), u.ID, input.Number); err != nil {
+	if err := s.Subscriptions.Subscribe(r.Context(), u.ID, input.Number); err != nil {
 		internal(w, err)
 		return
 	}
@@ -252,7 +230,7 @@ func (s *Server) subscribe(w http.ResponseWriter, r *http.Request, u models.User
 }
 
 func (s *Server) notifications(w http.ResponseWriter, r *http.Request, u models.User) {
-	notifications, err := s.Repository.Notifications(r.Context(), u.ID)
+	notifications, err := s.Notifications.Notifications(r.Context(), u.ID)
 	if err != nil {
 		internal(w, err)
 		return

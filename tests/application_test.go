@@ -31,7 +31,15 @@ func setup(t *testing.T) (*out.SQLiteRepository, *httptest.Server) {
 	}
 	t.Cleanup(func() { db.Close() })
 	repo := &out.SQLiteRepository{DB: db}
-	server := httptest.NewServer((&in.Server{Repository: repo, Registrar: services.DocumentProxy{Repository: repo, Factory: models.DocumentFactory{}}}).Handler())
+	auth := services.AuthService{Repository: repo, Hasher: services.BcryptPasswordHasher{}, Tokens: services.SHA256TokenProvider{}}
+	server := httptest.NewServer((&in.Server{
+		UserRegistrar:    auth,
+		SessionManager:   auth,
+		Registrar:        services.DocumentProxy{Repository: repo, Factory: models.DocumentFactory{}},
+		DocumentSearcher: services.DocumentSearchService{Repository: repo},
+		Subscriptions:    services.SubscriptionService{Repository: repo},
+		Notifications:    services.NotificationService{Repository: repo},
+	}).Handler())
 	t.Cleanup(server.Close)
 	return repo, server
 }
