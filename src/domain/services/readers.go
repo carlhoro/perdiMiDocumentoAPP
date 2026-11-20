@@ -3,7 +3,8 @@ package services
 import (
 	"context"
 
-	"perdimidocumento/src/domain/models"
+	"perdimidocumento/src/domain/models/document"
+	"perdimidocumento/src/domain/models/notification"
 	"perdimidocumento/src/domain/ports"
 )
 
@@ -22,7 +23,7 @@ type NotificationService struct {
 	Repository ports.Repository
 }
 
-func (s DocumentSearchService) Search(ctx context.Context, number string) ([]models.Document, error) {
+func (s DocumentSearchService) Search(ctx context.Context, number string) ([]document.FoundDocument, error) {
 	return s.Repository.SearchDocuments(ctx, number)
 }
 
@@ -30,6 +31,6 @@ func (s SubscriptionService) Subscribe(ctx context.Context, userID int64, number
 	return s.Repository.Subscribe(ctx, userID, number)
 }
 
-func (s NotificationService) Notifications(ctx context.Context, userID int64) ([]models.Notification, error) {
+func (s NotificationService) Notifications(ctx context.Context, userID int64) ([]notification.DocumentNotification, error) {
 	return s.Repository.Notifications(ctx, userID)
 }

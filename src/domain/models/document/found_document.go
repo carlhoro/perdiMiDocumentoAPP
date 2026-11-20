@@ -1,9 +1,9 @@
-package models
+package document
 
 import "time"
 
-// Document reóne los datos registrados de un documento encontrado.
-type Document struct {
+// FoundDocument reúne los datos registrados de un documento encontrado.
+type FoundDocument struct {
 	ID         int64
 	Number     string
 	Type       string

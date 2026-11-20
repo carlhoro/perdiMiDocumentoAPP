@@ -10,7 +10,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
-	"perdimidocumento/src/domain/models"
+	"perdimidocumento/src/domain/models/user"
 	"perdimidocumento/src/domain/ports"
 )
 
@@ -71,33 +71,33 @@ func (s AuthService) Register(ctx context.Context, username, password string) er
 }
 
 // Login verifica las credenciales y entrega el token cuya representación protegida se guarda en el repositorio.
-func (s AuthService) Login(ctx context.Context, username, password string) (ports.Session, error) {
-	user, err := s.Repository.UserByName(ctx, username)
+func (s AuthService) Login(ctx context.Context, username, password string) (user.Session, error) {
+	account, err := s.Repository.UserByName(ctx, username)
 	if errors.Is(err, ports.ErrNotFound) {
-		return ports.Session{}, ports.ErrInvalidCredentials
+		return user.Session{}, ports.ErrInvalidCredentials
 	}
 	if err != nil {
-		return ports.Session{}, err
+		return user.Session{}, err
 	}
-	if err := s.Hasher.Compare(user.PasswordHash, password); err != nil {
-		return ports.Session{}, ports.ErrInvalidCredentials
+	if err := s.Hasher.Compare(account.PasswordHash, password); err != nil {
+		return user.Session{}, ports.ErrInvalidCredentials
 	}
 	token, err := s.Tokens.New()
 	if err != nil {
-		return ports.Session{}, err
+		return user.Session{}, err
 	}
 	ttl := s.SessionTTL
 	if ttl <= 0 {
 		ttl = 24 * time.Hour
 	}
 	expiresAt := time.Now().Add(ttl)
-	if err := s.Repository.CreateSession(ctx, user.ID, s.Tokens.Hash(token), expiresAt); err != nil {
-		return ports.Session{}, err
+	if err := s.Repository.CreateSession(ctx, account.ID, s.Tokens.Hash(token), expiresAt); err != nil {
+		return user.Session{}, err
 	}
-	return ports.Session{Token: token, ExpiresAt: expiresAt, User: user}, nil
+	return user.Session{Token: token, ExpiresAt: expiresAt, User: account}, nil
 }
 
-func (s AuthService) UserByToken(ctx context.Context, token string) (models.User, error) {
+func (s AuthService) UserByToken(ctx context.Context, token string) (user.User, error) {
 	return s.Repository.UserBySession(ctx, s.Tokens.Hash(token))
 }
 

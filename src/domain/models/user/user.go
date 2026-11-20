@@ -1,4 +1,4 @@
-package models
+package user
 
 // User representa una cuenta local identificada por su ID.
 type User struct {

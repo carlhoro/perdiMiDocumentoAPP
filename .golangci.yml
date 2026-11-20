@@ -6,6 +6,7 @@ linters:
     - decorder
     - depguard
     - errcheck
+    - revive
   settings:
     decorder:
       dec-order: [type, const, var, func]
@@ -20,6 +21,14 @@ linters:
               desc: El dominio usa sus propios puertos para acceder a la infraestructura.
             - pkg: perdimidocumento/src/infrastructure/
               desc: El dominio usa sus propios puertos para acceder a la infraestructura.
+    revive:
+      enable-all-rules: false
+      rules:
+        # Los archivos Go usan minúsculas y snake_case.
+        - name: filename-format
+          arguments: ['^[_a-z][_a-z0-9]*\.go$']
+        # Los identificadores usan camelCase o PascalCase y respetan inicialismos como ID.
+        - name: var-naming
 
 formatters:
   enable:
