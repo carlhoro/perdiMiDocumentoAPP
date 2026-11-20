@@ -1,4 +1,4 @@
-// Package recovery coordinates recovery use cases without HTTP or database dependencies.
+// Package recovery coordina los casos de uso y accede al almacenamiento y otros servicios mediante puertos.
 package recovery
 
 import (
@@ -11,6 +11,7 @@ import (
 	"time"
 )
 
+// Service coordina las reglas de recuperación con las dependencias provistas por sus adaptadores.
 type Service struct {
 	Transactions               p.UnitOfWork
 	Identity                   p.IdentityProtector
@@ -21,6 +22,7 @@ type Service struct {
 	ReportTTL, DuplicateWindow time.Duration
 }
 
+// El compilador comprueba que Service implemente los puertos de entrada.
 var _ p.ReportRegistrar = Service{}
 var _ p.DocumentSearcher = Service{}
 var _ p.WatchManager = Service{}
@@ -51,6 +53,8 @@ func (s Service) authenticate(ctx context.Context, user int64) error {
 	}
 	return nil
 }
+
+// refs normaliza la identidad antes de pedir al protector las referencias que puede consultar el repositorio.
 func (s Service) refs(ctx context.Context, input m.IdentityInput) (m.IdentityInput, []m.ProtectedReference, error) {
 	i, err := input.Normalize()
 	if err != nil {
@@ -73,6 +77,8 @@ func (s Service) refs(ctx context.Context, input m.IdentityInput) (m.IdentityInp
 	}
 	return i, refs, nil
 }
+
+// proof comprueba que la evidencia devuelta por el verificador corresponda al usuario, al documento y al momento de la operación.
 func (s Service) proof(ctx context.Context, user int64, doc m.Document, now time.Time) (m.VerifiedOwnership, error) {
 	if s.Ownership == nil {
 		return m.VerifiedOwnership{}, m.ErrOwnership
@@ -86,6 +92,8 @@ func (s Service) proof(ctx context.Context, user int64, doc m.Document, now time
 	}
 	return v, nil
 }
+
+// SaveLocation crea una ubicación para un usuario autenticado y aplica visibilidad restringida por defecto.
 func (s Service) SaveLocation(ctx context.Context, user int64, l m.Location) (out m.Location, err error) {
 	if err = s.authenticate(ctx, user); err != nil {
 		return
@@ -102,6 +110,8 @@ func (s Service) SaveLocation(ctx context.Context, user int64, l m.Location) (ou
 	err = s.Transactions.Within(ctx, func(tx p.Store) error { var e error; out, e = tx.SaveLocation(ctx, l); return e })
 	return
 }
+
+// Register registra un hallazgo, sus avisos y la auditoría de éxito en una misma transacción.
 func (s Service) Register(ctx context.Context, user int64, c p.RegisterReport) (out m.FoundDocumentReport, err error) {
 	if err = s.authenticate(ctx, user); err != nil {
 		return
@@ -122,6 +132,7 @@ func (s Service) Register(ctx context.Context, user int64, c p.RegisterReport) (
 		if e != nil {
 			return e
 		}
+		// Un reintento con la misma clave devuelve el reporte original si los datos coinciden.
 		op, e := tx.Operation(ctx, user, c.OperationKey)
 		if e == nil {
 			if op.DocumentID != doc.ID || op.LocationID != c.LocationID || !op.ObservedAt.Equal(c.ObservedAt) {
@@ -137,6 +148,7 @@ func (s Service) Register(ctx context.Context, user int64, c p.RegisterReport) (
 		if e != nil {
 			return e
 		}
+		// Con una clave nueva, la deduplicación usa el reportante, la ubicación, el estado y la fecha de registro.
 		for _, r := range reports {
 			if r.ReportedBy == user && r.LocationID == c.LocationID && r.Status == m.Reported && !r.CreatedAt.Before(now.Add(-s.window())) {
 				out = r
@@ -148,6 +160,7 @@ func (s Service) Register(ctx context.Context, user int64, c p.RegisterReport) (
 			if e != nil {
 				return e
 			}
+			// Los avistamientos fuera de plazo se conservan como reportes históricos.
 			if !out.Available(now, s.ttl()) {
 				out.Status = m.Stale
 			}
@@ -166,6 +179,8 @@ func (s Service) Register(ctx context.Context, user int64, c p.RegisterReport) (
 	})
 	return
 }
+
+// auditRejection guarda el resultado del rechazo en su propia transacción y conserva el error original.
 func (s Service) auditRejection(ctx context.Context, user int64, cause error) error {
 	err := s.Transactions.Within(ctx, func(tx p.Store) error {
 		return tx.Audit(ctx, p.AuditEntry{ActorID: user, Operation: "register_report", Outcome: "invalid", At: s.Clock.Now().UTC()})
@@ -175,6 +190,8 @@ func (s Service) auditRejection(ctx context.Context, user int64, cause error) er
 	}
 	return cause
 }
+
+// Search muestra la disponibilidad del hallazgo vigente más reciente de cada ubicación a un usuario autenticado.
 func (s Service) Search(ctx context.Context, user int64, input m.IdentityInput) (out []m.Availability, err error) {
 	out = []m.Availability{}
 	if err = s.authenticate(ctx, user); err != nil {
@@ -186,6 +203,7 @@ func (s Service) Search(ctx context.Context, user int64, input m.IdentityInput) 
 	}
 	now := s.Clock.Now().UTC()
 	err = s.Transactions.Within(ctx, func(tx p.Store) error {
+		// Las búsquedas solo consultan documentos existentes.
 		doc, e := tx.ResolveDocument(ctx, i.Country, i.Type, refs, false)
 		if errors.Is(e, m.ErrNotFound) {
 			return nil
@@ -214,6 +232,8 @@ func (s Service) Search(ctx context.Context, user int64, input m.IdentityInput) 
 	})
 	return
 }
+
+// Activate acredita la titularidad, comprueba el cupo y busca coincidencias con reportes ya registrados.
 func (s Service) Activate(ctx context.Context, user int64, input m.IdentityInput) (out m.WatchedDocument, err error) {
 	if err = s.authenticate(ctx, user); err != nil {
 		return
@@ -244,10 +264,12 @@ func (s Service) Activate(ctx context.Context, user int64, input m.IdentityInput
 			if w.Status == m.Active {
 				count++
 			}
+			// Un usuario puede tener activa una sola cédula distinta, aunque su cupo sea mayor.
 			if w.Status == m.Active && w.DocumentID != doc.ID {
 				return m.ErrConflict
 			}
 		}
+		// Volver a activar un seguimiento ya activo conserva el cupo que estaba usando.
 		if out.Status != m.Active {
 			capacity := 1
 			if s.Capacity != nil {
@@ -281,6 +303,8 @@ func (s Service) Activate(ctx context.Context, user int64, input m.IdentityInput
 	})
 	return
 }
+
+// Stop desactiva el seguimiento del usuario para el documento indicado y conserva el registro del seguimiento.
 func (s Service) Stop(ctx context.Context, user, documentID int64) error {
 	if err := s.authenticate(ctx, user); err != nil {
 		return err
@@ -303,7 +327,8 @@ func (s Service) Stop(ctx context.Context, user, documentID int64) error {
 	})
 }
 
-// reportObserved is the synchronous Observer coordinator, independent of SQL.
+// reportObserved genera avisos para seguimientos previos a un nuevo hallazgo.
+// Vuelve a verificar la titularidad dentro de la transacción y suspende el seguimiento si perdió vigencia.
 func (s Service) reportObserved(ctx context.Context, tx p.Store, doc m.Document, r m.FoundDocumentReport, now time.Time) error {
 	if !r.Available(now, s.ttl()) {
 		return nil
@@ -340,6 +365,8 @@ func (s Service) notify(ctx context.Context, tx p.Store, w m.WatchedDocument, r 
 	}
 	return tx.InsertNotification(ctx, m.Notification{UserID: w.UserID, WatchID: w.ID, ReportID: r.ID, Kind: "match", CreatedAt: now})
 }
+
+// Notifications arma la vista de los avisos con la titularidad, la visibilidad y el estado vigentes al consultar.
 func (s Service) Notifications(ctx context.Context, user int64) (out []m.NotificationView, err error) {
 	out = []m.NotificationView{}
 	if err = s.authenticate(ctx, user); err != nil {
@@ -394,6 +421,7 @@ func (s Service) Notifications(ctx context.Context, user int64) (out []m.Notific
 			if e != nil {
 				return e
 			}
+			// El vencimiento se refleja en la respuesta. El estado guardado del reporte se conserva.
 			status := r.Status
 			if (status == m.Reported || status == m.Confirmed) && !r.Available(now, s.ttl()) {
 				status = m.Stale
@@ -404,6 +432,8 @@ func (s Service) Notifications(ctx context.Context, user int64) (out []m.Notific
 	})
 	return
 }
+
+// ChangeReport reúne los permisos que exige el estado solicitado y delega la transición al reporte.
 func (s Service) ChangeReport(ctx context.Context, user, id int64, to m.ReportStatus, reason string) error {
 	if err := s.authenticate(ctx, user); err != nil {
 		return err
