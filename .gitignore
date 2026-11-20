@@ -40,6 +40,9 @@ data/
 *.log
 logs/
 
+# Local plans and working documents
+/.local-plans/
+
 # Private keys and credential stores
 *.key
 *.pem

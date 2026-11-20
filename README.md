@@ -1,5 +1,15 @@
 # Perdí mi documento
 
+## Núcleo de recuperación en evolución
+
+El nuevo dominio de `src/application/recovery` separa identidad documental, hallazgos,
+ubicaciones, titularidad delegada y seguimientos. Sus contratos y reglas se describen
+en [docs/recovery-domain.md](docs/recovery-domain.md). Se prueba con dobles y todavía
+no está conectado al HTTP ni a SQLite: la aplicación existente conserva las limitaciones
+de privacidad y titularidad explicadas abajo. No incluye proveedores externos,
+criptografía concreta, pagos ni migraciones. La confirmación de custodia permanece
+deshabilitada porque los establecimientos no se acreditan.
+
 Aplicación web en Go para registrar documentos encontrados, buscar por número de identificación y recibir notificaciones dentro de la aplicación.
 
 ## Desarrollo con Docker

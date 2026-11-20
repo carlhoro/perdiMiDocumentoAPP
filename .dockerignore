@@ -39,3 +39,4 @@ logs
 **/*.jks
 *.keystore
 **/*.keystore
+.local-plans/
