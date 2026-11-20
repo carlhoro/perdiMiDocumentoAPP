@@ -14,7 +14,7 @@ linters:
       rules:
         domain:
           files:
-            - "${config-path}/src/domain/**/*.go"
+            - "**/src/domain/**/*.go"
           deny:
             - pkg: perdimidocumento/src/infrastructure$
               desc: El dominio usa sus propios puertos para acceder a la infraestructura.
