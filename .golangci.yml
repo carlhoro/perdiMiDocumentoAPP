@@ -1,0 +1,35 @@
+version: "2"
+
+linters:
+  default: none
+  enable:
+    - decorder
+    - depguard
+    - errcheck
+  settings:
+    decorder:
+      dec-order: [type, const, var, func]
+      disable-dec-order-check: false
+    depguard:
+      rules:
+        domain:
+          files:
+            - "${config-path}/src/domain/**/*.go"
+          deny:
+            - pkg: perdimidocumento/src/infrastructure$
+              desc: El dominio usa sus propios puertos para acceder a la infraestructura.
+            - pkg: perdimidocumento/src/infrastructure/
+              desc: El dominio usa sus propios puertos para acceder a la infraestructura.
+
+formatters:
+  enable:
+    - gci
+    - gofmt
+  settings:
+    gci:
+      sections:
+        - standard
+        - default
+        - prefix(perdimidocumento/)
+    gofmt:
+      simplify: false

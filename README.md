@@ -30,6 +30,19 @@ docker compose -f docker-compose.dev.yml run --rm app go test ./...
 
 Alternativamente, con Go 1.24 instalado: `go run ./src/cmd/server` y `go test ./...`. Por defecto la base se crea en `data/documentos.db`; `DB_PATH` cambia su ruta y `HTTP_ADDR` cambia la dirección del servidor.
 
+## Lint de Go
+
+Descarga el [binario oficial de golangci-lint v2.15.0](https://github.com/golangci/golangci-lint/releases/tag/v2.15.0) para tu plataforma. En Windows amd64, el archivo es `golangci-lint-2.15.0-windows-amd64.zip`. Compara su SHA-256 con la entrada correspondiente en `golangci-lint-2.15.0-checksums.txt` de la misma publicación. En PowerShell puedes calcularlo con `Get-FileHash -Algorithm SHA256`. Extrae el binario y ponlo en el `PATH`.
+
+Desde la raíz del repositorio, comprueba la configuración y analiza el dominio y los adaptadores:
+
+```sh
+golangci-lint config verify
+golangci-lint run ./src/domain/... ./src/infrastructure/...
+```
+
+El orden por archivo es paquete, importaciones, tipos e interfaces, constantes, variables y errores, y funciones y métodos. Las importaciones se agrupan en biblioteca estándar, dependencias externas y paquetes del módulo. La comprobación también detecta errores devueltos que se dejan sin revisar e importaciones de infraestructura desde el dominio.
+
 ## Uso
 
 Un usuario autenticado puede registrar el número, tipo, nombre del titular y dirección donde se encuentra un documento. La búsqueda es exacta por número, conservando ceros iniciales. La suscripción es por número; cuando se registra un documento coincidente se crea una notificación persistente para cada usuario suscrito. Al suscribirse a un número ya registrado también se generan notificaciones; repetir la suscripción no las duplica. La interfaz las consulta cada 15 segundos o al pulsar Actualizar. No se envían correos ni mensajes externos.
