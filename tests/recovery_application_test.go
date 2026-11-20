@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-// This serialized transactional double is deliberately test-only, not a storage adapter.
+// recoveryMemory simula un almacén transaccional en memoria para las pruebas de los casos de uso.
 type recoveryMemory struct {
 	mu        sync.Mutex
 	docs      []m.Document
@@ -25,6 +25,7 @@ type recoveryMemory struct {
 	fail      bool
 }
 
+// Within serializa las operaciones y aplica los cambios de la copia de trabajo solo al terminar con éxito.
 func (s *recoveryMemory) Within(ctx context.Context, f func(p.Store) error) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -192,12 +193,14 @@ type recoveryAuth struct{}
 func (recoveryAuth) Authenticated(_ context.Context, u int64) (bool, error) { return u > 0, nil }
 func (recoveryAuth) Moderator(_ context.Context, u int64) (bool, error)     { return u == 99, nil }
 
+// recoveryProtector genera referencias predecibles para las pruebas. A propósito deja el número visible.
 type recoveryProtector struct{}
 
 func (recoveryProtector) Lookup(_ context.Context, i m.IdentityInput) ([]m.ProtectedReference, error) {
 	return []m.ProtectedReference{{Value: "TEST-ONLY:" + i.Number, KeyVersion: "fake", NormalizationVersion: "1"}}, nil
 }
 
+// recoveryOwnership emite evidencia para el usuario 1 y permite simular su revocación.
 type recoveryOwnership struct {
 	clock   *recoveryClock
 	revoked bool
@@ -206,6 +209,8 @@ type recoveryOwnership struct {
 func (v *recoveryOwnership) Verify(_ context.Context, u int64, d m.Document) (m.VerifiedOwnership, error) {
 	return m.VerifiedOwnership{UserID: 1, DocumentID: d.ID, Issuer: "test", EvidenceReference: "evidence", VerifiedAt: v.clock.now.Add(-time.Hour), ExpiresAt: v.clock.now.Add(time.Hour), Revoked: v.revoked}, nil
 }
+
+// recoverySetup prepara un reloj fijo, un almacén vacío y una primera ubicación con visibilidad restringida.
 func recoverySetup(t *testing.T) (app.Service, *recoveryMemory, *recoveryClock, *recoveryOwnership) {
 	t.Helper()
 	clock := &recoveryClock{time.Date(2026, 11, 19, 0, 0, 0, 0, time.UTC)}
@@ -225,6 +230,8 @@ func recoveryInput() m.IdentityInput {
 type recoveryCapacity int
 
 func (c recoveryCapacity) Capacity(context.Context, int64) (int, error) { return int(c), nil }
+
+// TestRecoveryConcurrentActivationUsesOneSlot comprueba que dos activaciones simultáneas dejen un solo seguimiento.
 func TestRecoveryConcurrentActivationUsesOneSlot(t *testing.T) {
 	s, store, _, _ := recoverySetup(t)
 	ctx := context.Background()
@@ -253,6 +260,8 @@ func TestRecoveryConcurrentActivationUsesOneSlot(t *testing.T) {
 		t.Fatal("concurrent activation exceeded capacity")
 	}
 }
+
+// TestRecoveryCapacityAndUnavailableVerifier cubre los rechazos y el efecto de reducir el cupo sobre un seguimiento activo.
 func TestRecoveryCapacityAndUnavailableVerifier(t *testing.T) {
 	s, store, _, _ := recoverySetup(t)
 	ctx := context.Background()
@@ -280,6 +289,8 @@ func TestRecoveryCapacityAndUnavailableVerifier(t *testing.T) {
 		t.Fatal("downgrade canceled existing watch", e)
 	}
 }
+
+// TestRecoveryHistoricalReportsAndContradictions distingue un avistamiento vencido de dos ubicaciones vigentes en conflicto.
 func TestRecoveryHistoricalReportsAndContradictions(t *testing.T) {
 	s, store, clock, _ := recoverySetup(t)
 	ctx := context.Background()
@@ -309,6 +320,9 @@ func TestRecoveryHistoricalReportsAndContradictions(t *testing.T) {
 		t.Fatal(out, e)
 	}
 }
+
+// TestRecoveryObserverBothOrdersAndReactivation cubre el aviso tanto si se registra primero el hallazgo
+// como si se activa primero el seguimiento. También comprueba que repetir las operaciones conserve un solo aviso.
 func TestRecoveryObserverBothOrdersAndReactivation(t *testing.T) {
 	for _, first := range []bool{true, false} {
 		t.Run(fmt.Sprint(first), func(t *testing.T) {
@@ -354,6 +368,8 @@ func TestRecoveryObserverBothOrdersAndReactivation(t *testing.T) {
 		})
 	}
 }
+
+// TestRecoveryAuthorizationExpiryAndRevocation cubre la búsqueda anónima, la titularidad y los cambios que se reflejan al consultar.
 func TestRecoveryAuthorizationExpiryAndRevocation(t *testing.T) {
 	s, store, clock, proof := recoverySetup(t)
 	ctx := context.Background()
@@ -388,6 +404,8 @@ func TestRecoveryAuthorizationExpiryAndRevocation(t *testing.T) {
 		t.Fatal(views, e)
 	}
 }
+
+// TestRecoveryAtomicFailureAndConcurrentMatch comprueba que un fallo revierta el registro y que el reintento concurrente genere un solo aviso.
 func TestRecoveryAtomicFailureAndConcurrentMatch(t *testing.T) {
 	s, store, clock, _ := recoverySetup(t)
 	ctx := context.Background()
@@ -419,6 +437,8 @@ func TestRecoveryAtomicFailureAndConcurrentMatch(t *testing.T) {
 		t.Fatal("lost or duplicated concurrent match")
 	}
 }
+
+// TestRecoveryTransitionsAndOperationConflict cubre la reutilización de una clave con datos distintos y los permisos de recuperación.
 func TestRecoveryTransitionsAndOperationConflict(t *testing.T) {
 	s, _, clock, _ := recoverySetup(t)
 	ctx := context.Background()

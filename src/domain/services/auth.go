@@ -9,21 +9,36 @@ import (
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
+
 	"perdimidocumento/src/domain/models"
 	"perdimidocumento/src/domain/ports"
 )
 
+// PasswordHasher abstrae la generación y la comparación de hashes de contraseñas.
 type PasswordHasher interface {
 	Hash(string) (string, error)
 	Compare(string, string) error
 }
 
+// TokenProvider genera tokens de sesión y calcula su representación para el almacenamiento.
 type TokenProvider interface {
 	New() (string, error)
 	Hash(string) string
 }
 
+// BcryptPasswordHasher usa bcrypt para proteger y verificar contraseñas.
 type BcryptPasswordHasher struct{}
+
+// SHA256TokenProvider genera tokens aleatorios y deriva su hash SHA-256 para persistirlos.
+type SHA256TokenProvider struct{}
+
+// AuthService coordina el registro de cuentas y el ciclo de vida de las sesiones.
+type AuthService struct {
+	Repository ports.Repository
+	Hasher     PasswordHasher
+	Tokens     TokenProvider
+	SessionTTL time.Duration
+}
 
 func (BcryptPasswordHasher) Hash(password string) (string, error) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
@@ -33,8 +48,6 @@ func (BcryptPasswordHasher) Hash(password string) (string, error) {
 func (BcryptPasswordHasher) Compare(hash, password string) error {
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
 }
-
-type SHA256TokenProvider struct{}
 
 func (SHA256TokenProvider) New() (string, error) {
 	bytes := make([]byte, 32)
@@ -49,13 +62,6 @@ func (SHA256TokenProvider) Hash(token string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-type AuthService struct {
-	Repository ports.Repository
-	Hasher     PasswordHasher
-	Tokens     TokenProvider
-	SessionTTL time.Duration
-}
-
 func (s AuthService) Register(ctx context.Context, username, password string) error {
 	hash, err := s.Hasher.Hash(password)
 	if err != nil {
@@ -64,6 +70,7 @@ func (s AuthService) Register(ctx context.Context, username, password string) er
 	return s.Repository.CreateUser(ctx, username, hash)
 }
 
+// Login verifica las credenciales y entrega el token cuya representación protegida se guarda en el repositorio.
 func (s AuthService) Login(ctx context.Context, username, password string) (ports.Session, error) {
 	user, err := s.Repository.UserByName(ctx, username)
 	if errors.Is(err, ports.ErrNotFound) {

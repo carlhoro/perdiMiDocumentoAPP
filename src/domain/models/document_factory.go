@@ -6,11 +6,13 @@ import (
 	"unicode/utf8"
 )
 
-var ErrInvalidDocument = errors.New("documento inválido: número, tipo, nombre y dirección son obligatorios (máximo 200 caracteres cada uno)")
-
-// DocumentFactory is the factory method for found documents.
+// DocumentFactory construye documentos encontrados después de validar sus datos.
 type DocumentFactory struct{}
 
+// ErrInvalidDocument indica que uno o más campos del documento incumplen la validación.
+var ErrInvalidDocument = errors.New("documento inválido: número, tipo, nombre y dirección son obligatorios (máximo 200 caracteres cada uno)")
+
+// Create normaliza los campos de texto y valida la información antes de crear el documento.
 func (DocumentFactory) Create(number, documentType, ownerName, address string, userID int64) (Document, error) {
 	values := []*string{&number, &documentType, &ownerName, &address}
 	for _, value := range values {

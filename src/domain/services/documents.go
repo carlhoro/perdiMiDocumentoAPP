@@ -9,7 +9,7 @@ import (
 	"perdimidocumento/src/domain/ports"
 )
 
-// DocumentProxy validates document creation and audits rejected attempts.
+// DocumentProxy valida los hallazgos antes de guardarlos y audita los intentos rechazados.
 type DocumentProxy struct {
 	Repository ports.Repository
 	Factory    models.DocumentFactory
