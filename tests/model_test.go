@@ -70,7 +70,7 @@ func TestRestrictedLocationSummary(t *testing.T) {
 	}
 	l.Visibility = recovery.Public
 	if l.Summary().Address != l.Address {
-		t.Fatal("recovery.public establishment hidden")
+		t.Fatal("public establishment hidden")
 	}
 }
 
