@@ -24,8 +24,21 @@ func (r FoundDocumentReport) Available(now time.Time, ttl time.Duration) bool {
 	return (r.Status == valueobjects.Reported || r.Status == valueobjects.Confirmed) && now.Before(r.ObservedAt.Add(ttl))
 }
 
-// Change aplica las reglas de transición del reporte según el actor y el estado solicitado.
+// Change valida la transición y su motivo antes de registrar el cambio.
 func (r *FoundDocumentReport) Change(to valueobjects.ReportStatus, actorID int64, moderator, owner bool, reason string, now time.Time) error {
+	if err := r.validateTransition(to, actorID, moderator, owner); err != nil {
+		return err
+	}
+	reason, err := normalizeTransitionReason(reason)
+	if err != nil {
+		return err
+	}
+	r.recordTransition(to, actorID, reason, now)
+	return nil
+}
+
+// validateTransition comprueba el estado del reporte y los permisos del actor para el destino solicitado.
+func (r *FoundDocumentReport) validateTransition(to valueobjects.ReportStatus, actorID int64, moderator, owner bool) error {
 	if actorID <= 0 {
 		return recoveryerrors.ErrUnauthorized
 	}
@@ -36,7 +49,7 @@ func (r *FoundDocumentReport) Change(to valueobjects.ReportStatus, actorID int64
 	if r.Status != valueobjects.Reported && r.Status != valueobjects.Confirmed {
 		return recoveryerrors.ErrConflict
 	}
-	allowed := false
+	var allowed bool
 	switch to {
 	case valueobjects.Recovered:
 		allowed = owner
@@ -50,14 +63,23 @@ func (r *FoundDocumentReport) Change(to valueobjects.ReportStatus, actorID int64
 	if !allowed {
 		return recoveryerrors.ErrForbidden
 	}
+	return nil
+}
+
+// normalizeTransitionReason quita los espacios de los extremos y exige entre 1 y 200 caracteres Unicode.
+func normalizeTransitionReason(reason string) (string, error) {
 	reason = strings.TrimSpace(reason)
 	if reason == "" || utf8.RuneCountInString(reason) > 200 {
-		return recoveryerrors.ErrInvalid
+		return "", recoveryerrors.ErrInvalid
 	}
+	return reason, nil
+}
+
+// recordTransition guarda el estado anterior en el historial antes de actualizar el estado y la versión.
+func (r *FoundDocumentReport) recordTransition(to valueobjects.ReportStatus, actorID int64, reason string, now time.Time) {
 	r.History = append(r.History, valueobjects.Transition{From: r.Status, To: to, ActorID: actorID, Reason: reason, At: now.UTC()})
 	r.Status = to
 	r.Version++
-	return nil
 }
 
 // PotentialContradiction señala reportes vigentes en ubicaciones distintas para el mismo documento.
